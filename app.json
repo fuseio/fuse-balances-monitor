@@ -1,0 +1,12 @@
+[
+  {
+    "name"              : "balances_monitor",
+    "script"            : "index.js",
+    "log_date_format"   : "YYYY-MM-DD HH:mm Z",
+    "merge_logs"        : false,
+    "watch"             : false,
+    "max_restarts"      : 100,
+    "exec_interpreter"  : "node",
+    "exec_mode"         : "fork_mode"
+  }
+]
