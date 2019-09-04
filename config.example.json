@@ -1,0 +1,17 @@
+[
+  {
+    "role": "example #1",
+    "address": "0xB8Ce4A040E8aA33bBe2dE62E92851b7D7aFd52De",
+    "network": "fuse"
+  },
+  {
+    "role": "example #2",
+    "address": "0xF3a4C2862188781365966A040B1f47b9614b2DC7",
+    "network": "ropsten"
+  },
+  {
+    "role": "example #3",
+    "address": "0x8359c8278cD5626Ef9fbA0CD091fA6FA4334372E",
+    "network": "mainnet"
+  }
+]
