@@ -28,13 +28,19 @@ async function asyncForEach(array, callback) {
   }
 }
 
+function prettyNumber(n) {
+  let parts = n.toString().split('.')
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return parts.join('.')
+}
+
 async function run() {
   let fuse = await web3.fuse.eth.getBlockNumber()
   let ropsten = await web3.ropsten.eth.getBlockNumber()
   let mainnet = await web3.mainnet.eth.getBlockNumber()
   let balances = []
   await asyncForEach(config, async (obj) => {
-    obj.balance = web3[obj.network].utils.fromWei(await web3[obj.network].eth.getBalance(obj.address))
+    obj.balance = prettyNumber(web3[obj.network].utils.fromWei(await web3[obj.network].eth.getBalance(obj.address)))
     balances.push(obj)
   })
 
