@@ -35,26 +35,42 @@ function prettyNumber(n) {
 }
 
 async function run() {
-  let fuse = await web3.fuse.eth.getBlockNumber()
-  let ropsten = await web3.ropsten.eth.getBlockNumber()
-  let mainnet = await web3.mainnet.eth.getBlockNumber()
-  let balances = []
+  let result = {
+    fuse: {
+      block_number: await web3.fuse.eth.getBlockNumber(),
+      balances: []
+    },
+    ropsten: {
+      block_number: await web3.ropsten.eth.getBlockNumber(),
+      balances: []
+    },
+    mainnet: {
+      block_number: await web3.ropsten.eth.getBlockNumber(),
+      balances: []
+    }
+  }
   await asyncForEach(config, async (obj) => {
-    obj.balance = prettyNumber(web3[obj.network].utils.fromWei(await web3[obj.network].eth.getBalance(obj.address)))
-    balances.push(obj)
+    let balance = prettyNumber(web3[obj.network].utils.fromWei(await web3[obj.network].eth.getBalance(obj.address)))
+    result[obj.network].balances.push({
+      role: obj.role,
+      address: obj.address,
+      balance: balance
+    })
   })
+
+  result = JSON.stringify(result, null, 2)
 
   console.log(new Date())
-  console.log({fuse, ropsten, mainnet, balances})
+  console.log(result)
 
-  let params = { Subject: 'Balances Monitor', Message: JSON.stringify({fuse, ropsten, mainnet, balances}, null, 2), TopicArn: AWS_TOPIC_ARN}
-  let publishTextPromise = new AWS.SNS({apiVersion: '2010-03-31'}).publish(params).promise()
-  publishTextPromise.then(data => {
-    // console.log(`Message ${params.Message} sent to the topic ${params.TopicArn}`)
-    // console.log(`MessageID is ${data.MessageId}`)
-  }).catch(err => {
-    throw err
-  })
+  // let params = { Subject: 'Balances Monitor', Message: result, TopicArn: AWS_TOPIC_ARN}
+  // let publishTextPromise = new AWS.SNS({apiVersion: '2010-03-31'}).publish(params).promise()
+  // publishTextPromise.then(data => {
+  //   // console.log(`Message ${params.Message} sent to the topic ${params.TopicArn}`)
+  //   // console.log(`MessageID is ${data.MessageId}`)
+  // }).catch(err => {
+  //   throw err
+  // })
 }
 
 async function main() {
