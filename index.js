@@ -1,20 +1,24 @@
 require('dotenv').config()
 const Web3 = require('web3')
-const AWS = require('aws-sdk')
+const Slack = require('node-slackr')
 
 const config = require('./config')
 const {
   POLLING_INTERVAL,
   INFURA_API,
-  AWS_REGION,
-  AWS_TOPIC_ARN
+  SLACK_INCOMING_WEBHOOK_URL,
+  SLACK_CHANNEL
 } = process.env
-
-AWS.config.update({region: AWS_REGION || 'eu-central-1'})
 
 const fuseProvider = new Web3.providers.HttpProvider('https://rpc.fusenet.io')
 const ropstenProvider = new Web3.providers.HttpProvider(`https://ropsten.infura.io${INFURA_API || ''}`)
 const mainnetProvider = new Web3.providers.HttpProvider(`https://mainnet.infura.io${INFURA_API || ''}`)
+
+slack = new Slack(SLACK_INCOMING_WEBHOOK_URL, {
+  channel: `#${SLACK_CHANNEL}`,
+  username: `${SLACK_CHANNEL}-bot`,
+  icon_emoji: `:money_with_wings:`
+})
 
 const web3 = {
   fuse: new Web3(fuseProvider),
@@ -63,14 +67,12 @@ async function run() {
   console.log(new Date())
   console.log(result)
 
-  // let params = { Subject: 'Balances Monitor', Message: result, TopicArn: AWS_TOPIC_ARN}
-  // let publishTextPromise = new AWS.SNS({apiVersion: '2010-03-31'}).publish(params).promise()
-  // publishTextPromise.then(data => {
-  //   // console.log(`Message ${params.Message} sent to the topic ${params.TopicArn}`)
-  //   // console.log(`MessageID is ${data.MessageId}`)
-  // }).catch(err => {
-  //   throw err
-  // })
+  slack.notify("```" + result + "```", (err, data) => {
+    if (err) {
+      console.error(`Slack notification`, err)
+    }
+    console.log(`Slack notification`, data)
+  })
 }
 
 async function main() {
