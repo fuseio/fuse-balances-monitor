@@ -62,16 +62,16 @@ async function run() {
     })
   })
 
-  result = JSON.stringify(result, null, 2)
+  console.log(JSON.stringify(result, null, 2))
 
-  console.log(new Date())
-  console.log(result)
-
-  slack.notify("```" + result + "```", (err, data) => {
-    if (err) {
-      console.error(`Slack notification`, err)
-    }
-    console.log(`Slack notification`, data)
+  let codeBlock = '```'
+  Object.keys(result).forEach(k => {
+    slack.notify(`*${k.toUpperCase()}*:\n${codeBlock}${JSON.stringify(result[k], null, 2)}${codeBlock}`, (err, data) => {
+      if (err) {
+        console.error(`Slack notification`, err)
+      }
+      console.log(`Slack notification`, data)
+    })
   })
 }
 
