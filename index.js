@@ -16,7 +16,7 @@ const mainnetProvider = new Web3.providers.HttpProvider(`https://mainnet.infura.
 
 slack = new Slack(SLACK_INCOMING_WEBHOOK_URL, {
   channel: `#${SLACK_CHANNEL}`,
-  username: `balances-monitor-bot`,
+  username: `${SLACK_CHANNEL}-bot`,
   icon_emoji: `:money_with_wings:`
 })
 
