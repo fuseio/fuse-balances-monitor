@@ -49,7 +49,7 @@ async function run() {
       balances: []
     },
     mainnet: {
-      block_number: await web3.ropsten.eth.getBlockNumber(),
+      block_number: await web3.mainnet.eth.getBlockNumber(),
       balances: []
     }
   }
