@@ -3,6 +3,7 @@ const Web3 = require('web3')
 const Slack = require('node-slackr')
 
 const config = require('./config')
+const thresholds = require('./thresholds')
 const {
   POLLING_INTERVAL,
   INFURA_API,
@@ -40,38 +41,33 @@ function prettyNumber(n) {
 
 async function run() {
   let result = {
-    fuse: {
-      block_number: await web3.fuse.eth.getBlockNumber(),
-      balances: []
-    },
-    ropsten: {
-      block_number: await web3.ropsten.eth.getBlockNumber(),
-      balances: []
-    },
-    mainnet: {
-      block_number: await web3.mainnet.eth.getBlockNumber(),
-      balances: []
-    }
+    fuse: { block_number: await web3.fuse.eth.getBlockNumber(), accounts: [] },
+    ropsten: { block_number: await web3.ropsten.eth.getBlockNumber(), accounts: [] },
+    mainnet: { block_number: await web3.mainnet.eth.getBlockNumber(), accounts: [] }
   }
   await asyncForEach(config, async (obj) => {
-    let balance = prettyNumber(web3[obj.network].utils.fromWei(await web3[obj.network].eth.getBalance(obj.address)))
-    result[obj.network].balances.push({
-      role: obj.role,
-      address: obj.address,
-      balance: balance
+    let { description, address, networks, role } = obj
+    await asyncForEach(networks, async (net) => {
+      let balance = web3[net].utils.fromWei(await web3[net].eth.getBalance(address))
+      if (balance <= thresholds[net][role]) {
+        console.log(`${address} (${description}) is running low on ${net} [${prettyNumber(balance)}]`)
+        result[net].accounts.push({ description, address, net, role, balance })
+      } else {
+        console.log(`${address} (${description}) is fine on ${net} [${prettyNumber(balance)}]`)
+      }
     })
   })
 
-  console.log(JSON.stringify(result, null, 2))
-
   let codeBlock = '```'
   Object.keys(result).forEach(k => {
-    slack.notify(`*${k.toUpperCase()}*:\n${codeBlock}${JSON.stringify(result[k], null, 2)}${codeBlock}`, (err, data) => {
-      if (err) {
-        console.error(`Slack notification`, err)
-      }
-      console.log(`Slack notification`, data)
-    })
+    if (result[k].accounts.length > 0) {
+      slack.notify(`*${k.toUpperCase()}*:\n${codeBlock}${JSON.stringify(result[k], null, 2)}${codeBlock}`, (err, data) => {
+        if (err) {
+          console.error(`Slack notification`, err)
+        }
+        console.log(`Slack notification`, data)
+      })
+    }
   })
 }
 

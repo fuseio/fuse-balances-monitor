@@ -59,4 +59,7 @@ typings/
 
 # next.js build output
 .next
+
+# json configuration files
 config.json
+thresholds.json

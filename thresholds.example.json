@@ -1,0 +1,12 @@
+{
+  "fuse": {
+    "example-role": 5,
+    "another-example-role": 5
+  },
+  "ropsten": {
+    "another-example-role": 5
+  },
+  "mainnet": {
+    "example-role": 5
+  }
+}
