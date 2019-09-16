@@ -129,7 +129,7 @@ async function balances() {
     let { description, address, networks, role } = obj
     await asyncForEach(networks, async (net) => {
       let balance = web3[net].utils.fromWei(await web3[net].eth.getBalance(address))
-      if (balance <= thresholds[net][role]) {
+      if (balance < thresholds[net][role]) {
         console.log(`${address} (${description}) is running low on ${net} [${prettyNumber(balance)}]`)
         result[net].accounts.push({ description, address, net, role, balance })
       } else {
