@@ -1,5 +1,5 @@
 {
-  "name": "fuse-balances-monitor",
+  "name": "fuse-monitor",
   "version": "0.1.0",
   "main": "",
   "scripts": {
@@ -7,12 +7,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/fuseio/fuse-balances-monitor.git"
+    "url": "git+https://github.com/fuseio/fuse-monitor.git"
   },
   "author": "Lior Rabin",
   "license": "MIT",
   "dependencies": {
+    "axios": "^0.19.0",
     "dotenv": "^8.1.0",
+    "moment": "^2.24.0",
     "node-slackr": "^1.0.1",
     "web3": "1.0.0-beta.55"
   },

@@ -1,12 +1,19 @@
 require('dotenv').config()
+const path = require('path')
+const cwd = process.cwd()
 const Web3 = require('web3')
 const Slack = require('node-slackr')
+const moment = require('moment')
+const axios = require('axios')
 
 const config = require('./config')
 const thresholds = require('./thresholds')
 const {
   POLLING_INTERVAL,
   INFURA_API,
+  ETHERSCAN_API,
+  CONSENSUS_ADDRESS,
+  FOREIGN_BRIDGE_ADDRESS,
   SLACK_INCOMING_WEBHOOK_URL,
   SLACK_CHANNEL
 } = process.env
@@ -14,18 +21,20 @@ const {
 const fuseProvider = new Web3.providers.HttpProvider('https://rpc.fusenet.io')
 const ropstenProvider = new Web3.providers.HttpProvider(`https://ropsten.infura.io${INFURA_API || ''}`)
 const mainnetProvider = new Web3.providers.HttpProvider(`https://mainnet.infura.io${INFURA_API || ''}`)
+const web3 = {
+  fuse: new Web3(fuseProvider),
+  ropsten: new Web3(ropstenProvider),
+  mainnet: new Web3(mainnetProvider)
+}
 
+const codeBlock = '```'
 slack = new Slack(SLACK_INCOMING_WEBHOOK_URL, {
   channel: `#${SLACK_CHANNEL}`,
   username: `${SLACK_CHANNEL}-bot`,
   icon_emoji: `:money_with_wings:`
 })
 
-const web3 = {
-  fuse: new Web3(fuseProvider),
-  ropsten: new Web3(ropstenProvider),
-  mainnet: new Web3(mainnetProvider)
-}
+let consensus
 
 async function asyncForEach(array, callback) {
   for (let index = 0; index < array.length; index++) {
@@ -39,7 +48,78 @@ function prettyNumber(n) {
   return parts.join('.')
 }
 
-async function run() {
+function notify(network, msg) {
+  slack.notify(`*${network.toUpperCase()}*\n${msg}`, (err, data) => {
+    if (err) {
+      console.error(`Slack notification`, err)
+    }
+    console.log(`Slack notification`, data)
+  })
+}
+
+async function init() {
+  consensus = new web3.fuse.eth.Contract(require(path.join(cwd, 'abi/consensus')), CONSENSUS_ADDRESS)
+}
+
+async function blocks() {
+  console.log(`=== blocks ===`)
+
+  let blockNumber = await web3.fuse.eth.getBlockNumber()
+  let block = await web3.fuse.eth.getBlock(blockNumber)
+  let now = moment()
+  let blockTime = moment.unix(block.timestamp)
+  let diff = now.diff(blockTime, 'seconds')
+  console.log(`diff between now and last block time: ${diff}`)
+  if (diff > 5) {
+    notify(`fuse`, `Latest block was over 5 seconds ago: ${blockNumber}`)
+  }
+
+  let validators = await consensus.methods.getValidators.call()
+  validators = validators.map(v => v.toLowerCase())
+  let n = validators.length*2
+  console.log(`validators: ${validators}`)
+  let authors = []
+  for (let i = 0; i < n; i++) {
+    let { author } = await web3.fuse.eth.getBlock(blockNumber - i)
+    if (authors.indexOf(author) < 0) {
+      authors.push(author.toLowerCase())
+    }
+  }
+  console.log(`authors: ${authors}`)
+  authors.forEach(author => {
+    validators.splice(validators.indexOf(author), 1)
+  })
+  if (validators.length > 0) {
+    notify(`fuse`, `The following validators have not mined for ${n} blocks:\n${codeBlock}${JSON.stringify(validators, null, 2)}${codeBlock}`)
+  }
+}
+
+async function bridge() {
+  console.log(`=== bridge ===`)
+  let endBlock = await web3.mainnet.eth.getBlockNumber()
+  let startBlock = endBlock - 5000
+  let endpoint = `module=account&action=tokentx&address=${FOREIGN_BRIDGE_ADDRESS}&startblock=${startBlock}&endblock=${endBlock}&sort=asc`
+  console.log(`endpoint: ${endpoint}`)
+  let { data } = await axios.get(`${ETHERSCAN_API}&${endpoint}`)
+  if (data.message === 'OK') {
+    let isMinted
+    console.log(data)
+    data.result.forEach(obj => {
+      if (obj.from == '0x0000000000000000000000000000000000000000') {
+        isMinted = true
+      }
+    })
+    if (!isMinted) {
+      notify(`mainnet`, `No Fuse Tokens minted on last 5000 blocks (${startBlock} - ${endBlock})`)
+    }
+  } else {
+    console.error(`Etherscan request error`, data)
+  }
+}
+
+async function balances() {
+  console.log(`=== balances ===`)
+
   let result = {
     fuse: { block_number: await web3.fuse.eth.getBlockNumber(), accounts: [] },
     ropsten: { block_number: await web3.ropsten.eth.getBlockNumber(), accounts: [] },
@@ -58,22 +138,19 @@ async function run() {
     })
   })
 
-  let codeBlock = '```'
   Object.keys(result).forEach(k => {
     if (result[k].accounts.length > 0) {
-      slack.notify(`*${k.toUpperCase()}*:\n${codeBlock}${JSON.stringify(result[k], null, 2)}${codeBlock}`, (err, data) => {
-        if (err) {
-          console.error(`Slack notification`, err)
-        }
-        console.log(`Slack notification`, data)
-      })
+      notify(k.toUpperCase(), `${codeBlock}${JSON.stringify(result[k], null, 2)}${codeBlock}`)
     }
   })
 }
 
 async function main() {
   try {
-    await run()
+    await init()
+    await blocks()
+    await bridge()
+    await balances()
   } catch (e) {
     console.error(e)
   }
