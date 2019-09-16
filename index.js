@@ -39,7 +39,29 @@ function prettyNumber(n) {
   return parts.join('.')
 }
 
-async function run() {
+async function blocks() {
+  console.log(`=== blocks ===`)
+  // TODO
+  // check latest block wasn't too long ago
+  // get validators list from consensus account
+  // check x latest blocks to see that all validators are mining blocks
+}
+
+async function events() {
+  console.log(`=== events ===`)
+  // TODO
+  // check InitiateChange was emitted not too long ago
+  // check RewardedOnCycle was emitted not too long ago
+}
+
+async function bridge() {
+  console.log(`=== bridge ===`)
+  // TODO
+  // check that FUSE tokens were minted on mainnet
+}
+
+async function balances() {
+  console.log(`=== balances ===`)
   let result = {
     fuse: { block_number: await web3.fuse.eth.getBlockNumber(), accounts: [] },
     ropsten: { block_number: await web3.ropsten.eth.getBlockNumber(), accounts: [] },
@@ -73,7 +95,10 @@ async function run() {
 
 async function main() {
   try {
-    await run()
+    await blocks()
+    await events()
+    await bridge()
+    await balances()
   } catch (e) {
     console.error(e)
   }
