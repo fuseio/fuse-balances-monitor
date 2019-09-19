@@ -10,7 +10,9 @@ const config = require('./config')
 const thresholds = require('./thresholds')
 const {
   POLLING_INTERVAL,
-  INFURA_API,
+  FUSE_RPC_URL,
+  MAINNET_RPC_URL,
+  ROPSTEN_RPC_URL,
   ETHERSCAN_API,
   CONSENSUS_ADDRESS,
   FOREIGN_BRIDGE_ADDRESS,
@@ -18,13 +20,10 @@ const {
   SLACK_CHANNEL
 } = process.env
 
-const fuseProvider = new Web3.providers.HttpProvider('https://rpc.fusenet.io')
-const ropstenProvider = new Web3.providers.HttpProvider(`https://ropsten.infura.io${INFURA_API || ''}`)
-const mainnetProvider = new Web3.providers.HttpProvider(`https://mainnet.infura.io${INFURA_API || ''}`)
 const web3 = {
-  fuse: new Web3(fuseProvider),
-  ropsten: new Web3(ropstenProvider),
-  mainnet: new Web3(mainnetProvider)
+  fuse: new Web3(new Web3.providers.HttpProvider(FUSE_RPC_URL)),
+  mainnet: new Web3(new Web3.providers.HttpProvider(MAINNET_RPC_URL)),
+  ropsten: new Web3(new Web3.providers.HttpProvider(ROPSTEN_RPC_URL))
 }
 
 const codeBlock = '```'
