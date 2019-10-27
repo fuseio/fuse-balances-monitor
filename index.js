@@ -113,6 +113,7 @@ async function bridge() {
     }
   } else {
     console.error(`Etherscan request error`, data)
+    notify(`mainnet`, `Etherscan request error: ${JSON.stringify(data)}\nProbably no Fuse Tokens minted on last 5000 blocks (${startBlock} - ${endBlock})`)
   }
 }
 
