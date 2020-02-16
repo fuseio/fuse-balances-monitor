@@ -17,7 +17,8 @@ const {
   CONSENSUS_ADDRESS,
   FOREIGN_BRIDGE_ADDRESS,
   SLACK_INCOMING_WEBHOOK_URL,
-  SLACK_CHANNEL
+  SLACK_CHANNEL,
+  BLOCKS_ON_MAINNET
 } = process.env
 
 const web3 = {
@@ -96,7 +97,7 @@ async function blocks() {
 async function bridge() {
   console.log(`=== bridge ===`)
   let endBlock = await web3.mainnet.eth.getBlockNumber()
-  let startBlock = endBlock - 5000
+  let startBlock = endBlock - BLOCKS_ON_MAINNET
   let endpoint = `module=account&action=tokentx&address=${FOREIGN_BRIDGE_ADDRESS}&startblock=${startBlock}&endblock=${endBlock}&sort=asc`
   console.log(`endpoint: ${endpoint}`)
   let { data } = await axios.get(`${ETHERSCAN_API}&${endpoint}`)
@@ -109,11 +110,11 @@ async function bridge() {
       }
     })
     if (!isMinted) {
-      notify(`mainnet`, `No Fuse Tokens minted on last 5000 blocks (${startBlock} - ${endBlock})`)
+      notify(`mainnet`, `No Fuse Tokens minted on last ${BLOCKS_ON_MAINNET} blocks (${startBlock} - ${endBlock})`)
     }
   } else {
     console.error(`Etherscan request error`, data)
-    notify(`mainnet`, `Etherscan request error: ${JSON.stringify(data)}\nProbably no Fuse Tokens minted on last 5000 blocks (${startBlock} - ${endBlock})`)
+    notify(`mainnet`, `Etherscan request error: ${JSON.stringify(data)}\nProbably no Fuse Tokens minted on last ${BLOCKS_ON_MAINNET} blocks (${startBlock} - ${endBlock})`)
   }
 }
 
