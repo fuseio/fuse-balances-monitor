@@ -5,15 +5,18 @@ const Web3 = require('web3')
 const Slack = require('node-slackr')
 const moment = require('moment')
 const axios = require('axios')
+const { GraphQLClient } = require('graphql-request')
 
 const config = require('./config')
 const thresholds = require('./thresholds')
 const {
-  POLLING_INTERVAL,
+  MAIN_POLLING_INTERVAL,
+  TOKENS_POLLING_INTERVAL,
   FUSE_RPC_URL,
   MAINNET_RPC_URL,
   ROPSTEN_RPC_URL,
   ETHERSCAN_API,
+  GRAPH_URL,
   CONSENSUS_ADDRESS,
   FOREIGN_BRIDGE_ADDRESS,
   SLACK_INCOMING_WEBHOOK_URL,
@@ -35,6 +38,7 @@ slack = new Slack(SLACK_INCOMING_WEBHOOK_URL, {
 })
 
 let consensus
+let graphClient
 
 async function asyncForEach(array, callback) {
   for (let index = 0; index < array.length; index++) {
@@ -59,6 +63,7 @@ function notify(network, msg) {
 
 async function init() {
   consensus = new web3.fuse.eth.Contract(require(path.join(cwd, 'abi/consensus')), CONSENSUS_ADDRESS)
+  graphClient = new GraphQLClient(GRAPH_URL)
 }
 
 async function blocks() {
@@ -128,15 +133,17 @@ async function balances() {
   }
   await asyncForEach(config, async (obj) => {
     let { description, address, networks, role } = obj
-    await asyncForEach(networks, async (net) => {
-      let balance = web3[net].utils.fromWei(await web3[net].eth.getBalance(address))
-      if (balance < thresholds[net][role]) {
-        console.log(`${address} (${description}) is running low on ${net} [${prettyNumber(balance)}]`)
-        result[net].accounts.push({ description, address, net, role, balance })
-      } else {
-        console.log(`${address} (${description}) is fine on ${net} [${prettyNumber(balance)}]`)
-      }
-    })
+    if (!role.includes('token')) {
+      await asyncForEach(networks, async (net) => {
+        let balance = web3[net].utils.fromWei(await web3[net].eth.getBalance(address))
+        if (balance < thresholds[net][role]) {
+          console.log(`${address} (${description}) is running low on ${net} [${prettyNumber(balance)}]`)
+          result[net].accounts.push({ description, address, net, role, balance })
+        } else {
+          console.log(`${address} (${description}) is fine on ${net} [${prettyNumber(balance)}]`)
+        }
+      })
+    }
   })
 
   Object.keys(result).forEach(k => {
@@ -147,17 +154,56 @@ async function balances() {
 }
 
 async function main() {
+  console.log(`=== main ===`)
   try {
     await init()
     await blocks()
     await bridge()
     await balances()
+    tokens()
   } catch (e) {
     console.error(e)
   }
 
   setTimeout(() => {
     main()
-  }, POLLING_INTERVAL || 60000)
+  }, MAIN_POLLING_INTERVAL || 60000)
 }
+
+async function tokens() {
+  console.log(`=== tokens ===`)
+  try {
+    let result = {
+      fuse: { block_number: await web3.fuse.eth.getBlockNumber(), accounts: [] }
+    }
+    await asyncForEach(config, async (obj) => {
+      let { description, address, role, tokens } = obj
+      if (role.includes('token')) {
+        await asyncForEach(tokens, async (token) => {
+          let query = `{accountTokens(where:{account:"${address.toLowerCase()}", tokenAddress:"${token}"}) {account {id, address}, balance}}`
+          let data = await graphClient.request(query)
+          let balance = web3.fuse.utils.fromWei(web3.fuse.utils.toBN(data && data.accountTokens && data.accountTokens[0] && data.accountTokens[0].balance || 0))
+          if (balance < thresholds.fuse[role]) {
+            console.log(`${address} (${description}) is running low on fuse [${prettyNumber(balance)}]`)
+            result.fuse.accounts.push({ description, address, net: 'fuse', role, balance })
+          } else {
+            console.log(`${address} (${description}) is fine on fuse [${prettyNumber(balance)}]`)
+          }
+        })
+      }
+    })
+    Object.keys(result).forEach(k => {
+      if (result[k].accounts.length > 0) {
+        notify(k.toUpperCase(), `${codeBlock}${JSON.stringify(result[k], null, 2)}${codeBlock}`)
+      }
+    })
+  } catch (e) {
+    console.error(e)
+  }
+
+  setTimeout(() => {
+    tokens()
+  }, TOKENS_POLLING_INTERVAL || 60000)
+}
+
 main()
