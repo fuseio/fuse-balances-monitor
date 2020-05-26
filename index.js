@@ -21,7 +21,8 @@ const {
   FOREIGN_BRIDGE_ADDRESS,
   SLACK_INCOMING_WEBHOOK_URL,
   SLACK_CHANNEL,
-  BLOCKS_ON_MAINNET
+  BLOCKS_ON_MAINNET,
+  GRAPH_STATUS_URL
 } = process.env
 
 const web3 = {
@@ -39,6 +40,7 @@ slack = new Slack(SLACK_INCOMING_WEBHOOK_URL, {
 
 let consensus
 let graphClient
+let graphStatusClient
 
 async function asyncForEach(array, callback) {
   for (let index = 0; index < array.length; index++) {
@@ -64,6 +66,7 @@ function notify(network, msg) {
 async function init() {
   consensus = new web3.fuse.eth.Contract(require(path.join(cwd, 'abi/consensus')), CONSENSUS_ADDRESS)
   graphClient = new GraphQLClient(GRAPH_URL)
+  graphStatusClient = new GraphQLClient(GRAPH_STATUS_URL)
 }
 
 async function blocks() {
@@ -153,6 +156,31 @@ async function balances() {
   })
 }
 
+async function graphStatus() {
+  console.log(`=== graph status ===`)
+  let result = {
+    fuse: { block_number: await web3.fuse.eth.getBlockNumber() },
+    ropsten: { block_number: await web3.ropsten.eth.getBlockNumber() },
+    mainnet: { block_number: await web3.mainnet.eth.getBlockNumber() }
+  }
+  try {
+    let query = `{indexingStatuses {subgraph synced chains {network ... on EthereumIndexingStatus {latestBlock {number} earliestBlock {number} chainHeadBlock {number}}}}}`
+    let data = await graphStatusClient.request(query)
+    data && data.indexingStatuses.forEach(obj => {
+      const { network, latestBlock } = obj.chains[0]
+      result[network].graph_block_number = parseInt(latestBlock.number)
+    })
+    console.log(result)
+    Object.keys(result).forEach(k => {
+      if (result[k].block_number - result[k].graph_block_number > 5) {
+        notify(k.toUpperCase(), `${codeBlock}${JSON.stringify(result[k], null, 2)}${codeBlock}`)
+      }
+    })
+  } catch (e) {
+    notify(`general error`, `Graph status error: ${e}`)
+  }
+}
+
 async function main() {
   console.log(`=== main ===`)
   try {
@@ -160,7 +188,8 @@ async function main() {
     await blocks()
     await bridge()
     await balances()
-    tokens()
+    await graphStatus()
+    await tokens()
   } catch (e) {
     console.error(e)
   }
@@ -198,7 +227,7 @@ async function tokens() {
       }
     })
   } catch (e) {
-    console.error(e)
+    notify(`general error`, `Tokens error: ${e}`)
   }
 
   setTimeout(() => {
