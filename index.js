@@ -57,12 +57,12 @@ function prettyNumber(n) {
 }
 
 function notify(network, msg) {
-  // slack.notify(`*${network.toUpperCase()}*\n${msg}`, (err, data) => {
-  //   if (err) {
-  //     console.error(`Slack notification`, err)
-  //   }
-  //   console.log(`Slack notification`, data)
-  // })
+  slack.notify(`*${network.toUpperCase()}*\n${msg}`, (err, data) => {
+    if (err) {
+      console.error(`Slack notification`, err)
+    }
+    console.log(`Slack notification`, data)
+  })
 }
 
 async function init() {
