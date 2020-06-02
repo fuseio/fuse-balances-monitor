@@ -6,6 +6,7 @@ const Slack = require('node-slackr')
 const moment = require('moment')
 const axios = require('axios')
 const { GraphQLClient } = require('graphql-request')
+const Promise = require('bluebird')
 
 const config = require('./config')
 const thresholds = require('./thresholds')
@@ -22,7 +23,8 @@ const {
   SLACK_INCOMING_WEBHOOK_URL,
   SLACK_CHANNEL,
   BLOCKS_ON_MAINNET,
-  GRAPH_STATUS_URL
+  GRAPH_STATUS_URL,
+  GET_BALANCES_CONCURRENCY
 } = process.env
 
 const web3 = {
@@ -55,12 +57,12 @@ function prettyNumber(n) {
 }
 
 function notify(network, msg) {
-  slack.notify(`*${network.toUpperCase()}*\n${msg}`, (err, data) => {
-    if (err) {
-      console.error(`Slack notification`, err)
-    }
-    console.log(`Slack notification`, data)
-  })
+  // slack.notify(`*${network.toUpperCase()}*\n${msg}`, (err, data) => {
+  //   if (err) {
+  //     console.error(`Slack notification`, err)
+  //   }
+  //   console.log(`Slack notification`, data)
+  // })
 }
 
 async function init() {
@@ -134,20 +136,21 @@ async function balances() {
     ropsten: { block_number: await web3.ropsten.eth.getBlockNumber(), accounts: [] },
     mainnet: { block_number: await web3.mainnet.eth.getBlockNumber(), accounts: [] }
   }
-  await asyncForEach(config, async (obj) => {
-    let { description, address, networks, role } = obj
-    if (!role.includes('token')) {
-      await asyncForEach(networks, async (net) => {
-        let balance = web3[net].utils.fromWei(await web3[net].eth.getBalance(address))
-        if (balance < thresholds[net][role]) {
-          console.log(`${address} (${description}) is running low on ${net} [${prettyNumber(balance)}]`)
-          result[net].accounts.push({ description, address, net, role, balance })
-        } else {
-          console.log(`${address} (${description}) is fine on ${net} [${prettyNumber(balance)}]`)
-        }
-      })
-    }
-  })
+
+  const validators = config.filter(({ role }) => !role.includes('token'))
+
+  await Promise.map(validators, async obj => {
+    const { description, address, networks, role } = obj
+    await asyncForEach(networks, async (net) => {
+      const balance = web3[net].utils.fromWei(await web3[net].eth.getBalance(address))
+      if (balance < thresholds[net][role]) {
+        console.log(`${address} (${description}) is running low on ${net} [${prettyNumber(balance)}]`)
+        result[net].accounts.push({ description, address, net, role, balance })
+      } else {
+        console.log(`${address} (${description}) is fine on ${net} [${prettyNumber(balance)}]`)
+      }
+    })
+  }, { concurrency: parseInt(GET_BALANCES_CONCURRENCY) })
 
   Object.keys(result).forEach(k => {
     if (result[k].accounts.length > 0) {
