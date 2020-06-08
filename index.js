@@ -30,10 +30,6 @@ const {
 
 const NOTIFY_ON_SLACK = yn(process.env.NOTIFY_ON_SLACK)
 
-if (NOTIFY_ON_SLACK) {
-  console.log(NOTIFY_ON_SLACK)
-}
-
 const web3 = {
   fuse: new Web3(new Web3.providers.HttpProvider(FUSE_RPC_URL)),
   mainnet: new Web3(new Web3.providers.HttpProvider(MAINNET_RPC_URL)),
@@ -64,14 +60,14 @@ function prettyNumber (n) {
 }
 
 function notify (network, msg) {
-  // if (NOTIFY_ON_SLACK) {
-  //   slack.notify(`*${network.toUpperCase()}*\n${msg}`, (err, data) => {
-  //     if (err) {
-  //       console.error('Slack notification', err)
-  //     }
-  //     console.log('Slack notification', data)
-  //   })
-  // }
+  if (NOTIFY_ON_SLACK) {
+    slack.notify(`*${network.toUpperCase()}*\n${msg}`, (err, data) => {
+      if (err) {
+        console.error('Slack notification', err)
+      }
+      console.log('Slack notification', data)
+    })
+  }
 }
 
 async function init () {
