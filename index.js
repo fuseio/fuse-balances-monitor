@@ -7,6 +7,7 @@ const moment = require('moment')
 const axios = require('axios')
 const { GraphQLClient } = require('graphql-request')
 const Promise = require('bluebird')
+const yn = require('yn')
 
 const config = require('./config')
 const thresholds = require('./thresholds')
@@ -27,6 +28,8 @@ const {
   GET_BALANCES_CONCURRENCY
 } = process.env
 
+const NOTIFY_ON_SLACK = yn(process.env.NOTIFY_ON_SLACK)
+
 const web3 = {
   fuse: new Web3(new Web3.providers.HttpProvider(FUSE_RPC_URL)),
   mainnet: new Web3(new Web3.providers.HttpProvider(MAINNET_RPC_URL)),
@@ -34,63 +37,65 @@ const web3 = {
 }
 
 const codeBlock = '```'
-slack = new Slack(SLACK_INCOMING_WEBHOOK_URL, {
+const slack = new Slack(SLACK_INCOMING_WEBHOOK_URL, {
   channel: `#${SLACK_CHANNEL}`,
   username: `${SLACK_CHANNEL}-bot`,
-  icon_emoji: `:money_with_wings:`
+  icon_emoji: ':money_with_wings:'
 })
 
 let consensus
 let graphClient
 let graphStatusClient
 
-async function asyncForEach(array, callback) {
+async function asyncForEach (array, callback) {
   for (let index = 0; index < array.length; index++) {
     await callback(array[index], index, array)
   }
 }
 
-function prettyNumber(n) {
-  let parts = n.toString().split('.')
+function prettyNumber (n) {
+  const parts = n.toString().split('.')
   parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',')
   return parts.join('.')
 }
 
-function notify(network, msg) {
-  slack.notify(`*${network.toUpperCase()}*\n${msg}`, (err, data) => {
-    if (err) {
-      console.error(`Slack notification`, err)
-    }
-    console.log(`Slack notification`, data)
-  })
+function notify (network, msg) {
+  if (NOTIFY_ON_SLACK) {
+    slack.notify(`*${network.toUpperCase()}*\n${msg}`, (err, data) => {
+      if (err) {
+        console.error('Slack notification', err)
+      }
+      console.log('Slack notification', data)
+    })
+  }
 }
 
-async function init() {
+async function init () {
   consensus = new web3.fuse.eth.Contract(require(path.join(cwd, 'abi/consensus')), CONSENSUS_ADDRESS)
   graphClient = new GraphQLClient(GRAPH_URL)
   graphStatusClient = new GraphQLClient(GRAPH_STATUS_URL)
 }
 
-async function blocks() {
-  console.log(`=== blocks ===`)
+async function blocks () {
+  console.log('=== blocks ===')
 
-  let blockNumber = await web3.fuse.eth.getBlockNumber()
-  let block = await web3.fuse.eth.getBlock(blockNumber)
-  let now = moment()
-  let blockTime = moment.unix(block.timestamp)
-  let diff = now.diff(blockTime, 'seconds')
+  const blockNumber = await web3.fuse.eth.getBlockNumber()
+  const block = await web3.fuse.eth.getBlock(blockNumber)
+  const now = moment()
+  const blockTime = moment.unix(block.timestamp)
+  const diff = now.diff(blockTime, 'seconds')
   console.log(`diff between now and last block time: ${diff}`)
   if (diff > 5) {
-    notify(`fuse`, `Latest block was over 5 seconds ago: ${blockNumber}`)
+    notify('fuse', `Latest block was over 5 seconds ago: ${blockNumber}`)
   }
 
   let validators = await consensus.methods.getValidators.call()
   validators = validators.map(v => v.toLowerCase())
-  let n = validators.length*2
+  const n = validators.length * 2
   console.log(`validators: ${validators}`)
-  let authors = []
+  const authors = []
   for (let i = 0; i < n; i++) {
-    let { author } = await web3.fuse.eth.getBlock(blockNumber - i)
+    const { author } = await web3.fuse.eth.getBlock(blockNumber - i)
     if (authors.indexOf(author) < 0) {
       authors.push(author.toLowerCase())
     }
@@ -100,38 +105,38 @@ async function blocks() {
     validators.splice(validators.indexOf(author), 1)
   })
   if (validators.length > 0) {
-    notify(`fuse`, `The following validators have not mined for ${n} blocks:\n${codeBlock}${JSON.stringify(validators, null, 2)}${codeBlock}`)
+    notify('fuse', `The following validators have not mined for ${n} blocks:\n${codeBlock}${JSON.stringify(validators, null, 2)}${codeBlock}`)
   }
 }
 
-async function bridge() {
-  console.log(`=== bridge ===`)
-  let endBlock = await web3.mainnet.eth.getBlockNumber()
-  let startBlock = endBlock - BLOCKS_ON_MAINNET
-  let endpoint = `module=account&action=tokentx&address=${FOREIGN_BRIDGE_ADDRESS}&startblock=${startBlock}&endblock=${endBlock}&sort=asc`
+async function bridge () {
+  console.log('=== bridge ===')
+  const endBlock = await web3.mainnet.eth.getBlockNumber()
+  const startBlock = endBlock - BLOCKS_ON_MAINNET
+  const endpoint = `module=account&action=tokentx&address=${FOREIGN_BRIDGE_ADDRESS}&startblock=${startBlock}&endblock=${endBlock}&sort=asc`
   console.log(`endpoint: ${endpoint}`)
-  let { data } = await axios.get(`${ETHERSCAN_API}&${endpoint}`)
+  const { data } = await axios.get(`${ETHERSCAN_API}&${endpoint}`)
   if (data.message === 'OK') {
     let isMinted
     console.log(data)
     data.result.forEach(obj => {
-      if (obj.from == '0x0000000000000000000000000000000000000000') {
+      if (obj.from === '0x0000000000000000000000000000000000000000') {
         isMinted = true
       }
     })
     if (!isMinted) {
-      notify(`mainnet`, `No Fuse Tokens minted on last ${BLOCKS_ON_MAINNET} blocks (${startBlock} - ${endBlock})`)
+      notify('mainnet', `No Fuse Tokens minted on last ${BLOCKS_ON_MAINNET} blocks (${startBlock} - ${endBlock})`)
     }
   } else {
-    console.error(`Etherscan request error`, data)
-    notify(`mainnet`, `Etherscan request error: ${JSON.stringify(data)}\nProbably no Fuse Tokens minted on last ${BLOCKS_ON_MAINNET} blocks (${startBlock} - ${endBlock})`)
+    console.error('Etherscan request error', data)
+    notify('mainnet', `Etherscan request error: ${JSON.stringify(data)}\nProbably no Fuse Tokens minted on last ${BLOCKS_ON_MAINNET} blocks (${startBlock} - ${endBlock})`)
   }
 }
 
-async function balances() {
-  console.log(`=== balances ===`)
+async function balances () {
+  console.log('=== balances ===')
 
-  let result = {
+  const result = {
     fuse: { block_number: await web3.fuse.eth.getBlockNumber(), accounts: [] },
     ropsten: { block_number: await web3.ropsten.eth.getBlockNumber(), accounts: [] },
     mainnet: { block_number: await web3.mainnet.eth.getBlockNumber(), accounts: [] }
@@ -159,16 +164,16 @@ async function balances() {
   })
 }
 
-async function graphStatus() {
-  console.log(`=== graph status ===`)
-  let result = {
+async function graphStatus () {
+  console.log('=== graph status ===')
+  const result = {
     fuse: { block_number: await web3.fuse.eth.getBlockNumber() },
     ropsten: { block_number: await web3.ropsten.eth.getBlockNumber() },
     mainnet: { block_number: await web3.mainnet.eth.getBlockNumber() }
   }
   try {
-    let query = `{indexingStatuses {subgraph synced chains {network ... on EthereumIndexingStatus {latestBlock {number} earliestBlock {number} chainHeadBlock {number}}}}}`
-    let data = await graphStatusClient.request(query)
+    const query = '{indexingStatuses {subgraph synced chains {network ... on EthereumIndexingStatus {latestBlock {number} earliestBlock {number} chainHeadBlock {number}}}}}'
+    const data = await graphStatusClient.request(query)
     data && data.indexingStatuses.forEach(obj => {
       const { network, latestBlock } = obj.chains[0]
       result[network].graph_block_number = parseInt(latestBlock.number)
@@ -180,12 +185,12 @@ async function graphStatus() {
       }
     })
   } catch (e) {
-    notify(`general error`, `Graph status error: ${e}`)
+    notify('general error', `Graph status error: ${e}`)
   }
 }
 
-async function main() {
-  console.log(`=== main ===`)
+async function main () {
+  console.log('=== main ===')
   try {
     await init()
     await blocks()
@@ -202,19 +207,19 @@ async function main() {
   }, MAIN_POLLING_INTERVAL || 60000)
 }
 
-async function tokens() {
-  console.log(`=== tokens ===`)
+async function tokens () {
+  console.log('=== tokens ===')
   try {
-    let result = {
+    const result = {
       fuse: { block_number: await web3.fuse.eth.getBlockNumber(), accounts: [] }
     }
     await asyncForEach(config, async (obj) => {
-      let { description, address, role, tokens } = obj
+      const { description, address, role, tokens } = obj
       if (role.includes('token')) {
         await asyncForEach(tokens, async (token) => {
-          let query = `{accountTokens(where:{account:"${address.toLowerCase()}", tokenAddress:"${token}"}) {account {id, address}, balance}}`
-          let data = await graphClient.request(query)
-          let balance = web3.fuse.utils.fromWei(web3.fuse.utils.toBN(data && data.accountTokens && data.accountTokens[0] && data.accountTokens[0].balance || 0))
+          const query = `{accountTokens(where:{account:"${address.toLowerCase()}", tokenAddress:"${token}"}) {account {id, address}, balance}}`
+          const data = await graphClient.request(query)
+          const balance = web3.fuse.utils.fromWei(web3.fuse.utils.toBN(data && data.accountTokens && data.accountTokens[0] && data.accountTokens[0].balance || 0))
           if (balance < thresholds.fuse[role]) {
             console.log(`${address} (${description}) is running low on fuse [${prettyNumber(balance)}]`)
             result.fuse.accounts.push({ description, address, net: 'fuse', role, balance })
@@ -230,7 +235,7 @@ async function tokens() {
       }
     })
   } catch (e) {
-    notify(`general error`, `Tokens error: ${e}`)
+    notify('general error', `Tokens error: ${e}`)
   }
 
   setTimeout(() => {
